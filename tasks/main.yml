@@ -26,7 +26,7 @@
           samba-tool
           domain backup online
           "--targetdir={{ backup_path }}"
-          "--server={{ inventory_hostname }}"
+          "--server={{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}"
           "-U{{ smb_username }}"
           "--password={{ smb_password }}"
       register: dbbackup_output
