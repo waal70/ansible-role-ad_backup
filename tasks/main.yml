@@ -1,5 +1,9 @@
 ---
 # tasks file for ad_backup
+- name: As per Samba wiki, an AD backup is only required for one DC
+  ansible.builtin.meta: end_role
+  when: hostvars[ansible_hostname].ad_role != "primary"
+
 - name: Check time of last backup
   ansible.builtin.import_tasks: checkage.yml
 
