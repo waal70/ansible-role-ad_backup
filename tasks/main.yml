@@ -1,5 +1,9 @@
 ---
 # tasks file for ad_backup
+- name: Skip this entire role if the host is in the test group
+  ansible.builtin.meta: end_role
+  when: "'test' in group_names"
+
 - name: As per Samba wiki, an AD backup is only required for one DC
   ansible.builtin.meta: end_role
   when: hostvars[ansible_hostname].ad_role != "primary"
