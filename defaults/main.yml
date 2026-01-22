@@ -2,9 +2,14 @@
 # defaults file for ad_backup
 smb_username: Administrator
 smb_password: "{{ vault_smb_password }}"
-backup_path: "/tmp"
-backup_max_age: "7d"
-smb_backup_share: "//172.16.10.2/backup"
-smb_backup_path: "/Informatica@HOME/Computers/ActiveDirectory/"
-local_backup_path: "/mnt/backup"
-cifcreds: "{{ lookup('ansible.builtin.env', 'PRIVATE_REPO') | default('~') }}/ansible-vault/.cifscredential"
+
+st: "sudo /usr/bin/samba-tool"
+stdbo: "{{ st }} domain backup online"
+
+backup_folder: "/home/{{ ansible_user }}/samba_backups"
+backup_pattern: "samba-backup*.tar.bz2"
+
+backup_tasks: [
+  "{{ st }} dbcheck -U{{ smb_username }} --fix --yes",
+  "{{ stdbo }} --targetdir={{ backup_folder }} --server={{ ansible_default_ipv4.address }} --authentication-file=/home/{{ ansible_user }}/.auth"
+]

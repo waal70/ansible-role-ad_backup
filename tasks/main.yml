@@ -4,84 +4,49 @@
   ansible.builtin.meta: end_role
   when: "'test' in group_names"
 
-- name: As per Samba wiki, an AD backup is only required for one DC
-  ansible.builtin.meta: end_role
-  when: hostvars[ansible_hostname].ad_role != "primary"
+- name: Get domain info
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      samba-tool domain info 127.0.0.1 | grep Domain | cut -c 20-
+  register: domain_info
+  failed_when: false
+  changed_when: domain_info.rc == 0
 
-- name: Check time of last backup
-  ansible.builtin.import_tasks: checkage.yml
+- name: Set fact for FQ domain name
+  ansible.builtin.set_fact:
+    fqdomain: "{{ domain_info.stdout }}"
 
-- name: Import tasks to mount backup folder
-  ansible.builtin.import_tasks: mountlocal.yml
-  delegate_to: localhost
+- name: Ensure the backup target folder exists
+  ansible.builtin.file:
+    path: "{{ backup_folder }}"
+    state: directory
+    mode: "0744"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
 
-- name: Check the SAMBA database for errors and correct if necessary
-  ansible.builtin.command:
-    cmd: "samba-tool dbcheck -U{{ smb_username }} --fix --yes"
-  register: dbcheck_output
-  changed_when: "dbcheck_output.rc != 0"
+- name: Template out the auth-file to Ansible's home
+  ansible.builtin.template:
+    src: .auth.j2
+    dest: "/home/{{ ansible_user }}/.auth"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0600"
 
-- name: Give user the summary output from the dbcheck command
-  ansible.builtin.debug:
-    msg: "{{ dbcheck_output.stdout_lines | last }}"
+- name: Template out the backup-file to Ansible's home
+  ansible.builtin.template:
+    src: backup_ad.sh.j2
+    dest: "{{ backup_folder }}/backup_ad.sh"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0744"
 
-- name: Backup SAMBA AD DC block
-  when: "('0 errors' in dbcheck_output.stdout_lines | last) and (backup_age.files | length > 0)"
-  block:
-    - name: Create an online backup-file on server {{ inventory_hostname }}
-      ansible.builtin.command:
-        cmd: >
-          samba-tool
-          domain backup online
-          "--targetdir={{ backup_path }}"
-          "--server={{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}"
-          "-U{{ smb_username }}"
-          "--password={{ smb_password }}"
-      register: dbbackup_output
-      changed_when: "dbbackup_output.rc != 0"
-
-    - name: Display output
-      ansible.builtin.debug:
-        msg: "{{ dbbackup_output.stdout_lines | last }}"
-
-    - name: Now find the most recent bz2 file in the backup-path
-      ansible.builtin.find:
-        paths: "{{ backup_path }}"
-        patterns: "samba-backup*.bz2"
-        age: "-1h"
-      register: backupfiles
-
-    - name: Fetch the backup-files to local machine
-      ansible.builtin.fetch:
-        src: "{{ item.path }}"
-        dest: "temporary-files/{{ inventory_hostname }}/"
-        flat: true
-      with_items: "{{ backupfiles.files }}"
-
-    - name: Destroy the originals
-      ansible.builtin.file:
-        path: "{{ item.path }}"
-        state: absent
-      with_items: "{{ backupfiles.files }}"
-
-    - name: Touch the backup marker
-      ansible.builtin.file:
-        path: /etc/samba/backupmarker
-        state: touch
-        mode: "0777"
-        modification_time: 'now'
-# END BLOCK
-
-- name: Import tasks to transfer backup files to backup server # noqa no-handler
-  ansible.builtin.import_tasks: transferbackup.yml
-  delegate_to: localhost
-  when: mounted.changed
-
-- name: Give user info on the network share not being available # noqa no-handler
-  ansible.builtin.debug:
-    msg:
-      - "Please note that the backup-server appears to be offline"
-      - "The backup-files will be retained locally until you run this playbook again"
-      - "at which time also all retained files will be transferred."
-      - "The server which is offline is: {{ smb_backup_share }}"
-  when: not mounted.changed
+- name: "Schedule a regular export in cron"
+  ansible.builtin.cron:
+    name: "samba-ad-dc export"
+    weekday: "6"
+    minute: "00"
+    hour: "4"
+    user: "{{ ansible_user }}"
+    job: "{{ backup_folder }}/backup_ad.sh >> /home/{{ ansible_user }}/crontab.log 2>&1"
+    state: "present"
