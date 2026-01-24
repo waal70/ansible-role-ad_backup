@@ -17,7 +17,6 @@ backup_max_age: "30d"
 smb_backup_share: "//ip-address/backup"
 smb_backup_path: "/whateverfolderis/to/follow"
 local_backup_path: "/mnt/backup"
-cifcreds: "{{ lookup('ansible.builtin.env', 'PRIVATE_REPO') | default('~') }}/ansible-vault/.cifscredential"
 vault_smb_password: yourpasswordhere
 ```
 
