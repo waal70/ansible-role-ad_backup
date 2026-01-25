@@ -11,7 +11,7 @@
       samba-tool domain info 127.0.0.1 | grep Domain | cut -c 20-
   register: domain_info
   failed_when: false
-  changed_when: domain_info.rc == 0
+  changed_when: domain_info.rc != 0
 
 - name: Set fact for FQ domain name
   ansible.builtin.set_fact:
