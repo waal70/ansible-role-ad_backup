@@ -11,5 +11,5 @@ backup_pattern: "samba-backup*.tar.bz2"
 
 backup_tasks: [
   "{{ st }} dbcheck -U{{ smb_username }} --fix --yes",
-  "{{ stdbo }} --targetdir={{ backup_folder }} --server={{ ansible_default_ipv4.address }} --authentication-file=/home/{{ ansible_user }}/.auth"
+  "{{ stdbo }} --targetdir={{ backup_folder }} --server={{ ansible_facts['default_ipv4'].address }} --authentication-file=/home/{{ ansible_user }}/.auth"
 ]
